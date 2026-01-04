@@ -12,7 +12,6 @@
     background-color: #1e1e1e;
     color: #f5f5f7;
     margin: 0;
-    padding: 0;
     display: flex;
     justify-content: center;
     align-items: center;
@@ -58,11 +57,19 @@
     outline: none;
   }
 
-  /* Fix select arrow on desktop, keep iOS fine */
+  /* remove number spinners (the annoying arrows) */
+  input[type=number]::-webkit-outer-spin-button,
+  input[type=number]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  input[type=number] {
+    -moz-appearance: textfield;
+  }
+
   select {
     appearance: none;
-    -webkit-appearance: none;
-    -moz-appearance: none;
     padding-right: 36px;
     background-image: url("data:image/svg+xml;utf8,<svg fill='%23aaa' height='20' viewBox='0 0 24 24' width='20' xmlns='http://www.w3.org/2000/svg'><path d='M7 10l5 5 5-5z'/></svg>");
     background-repeat: no-repeat;
@@ -89,20 +96,10 @@
 
   .result {
     margin-top: 18px;
-    font-size: 16px;
+    font-size: 15px;
     font-weight: 600;
     text-align: center;
-    line-height: 1.5;
-  }
-
-  input::-webkit-outer-spin-button,
-  input::-webkit-inner-spin-button {
-    -webkit-appearance: none;
-    margin: 0;
-  }
-
-  input[type=number] {
-    -moz-appearance: textfield;
+    line-height: 1.7;
   }
 </style>
 </head>
@@ -111,8 +108,8 @@
 <div class="container">
   <h1>Net Price Calculator</h1>
 
-  <label for="price">Price (+5% Fee):</label>
-  <input type="number" id="price" placeholder="Enter total price" step="0.01">
+  <label for="price">Price:</label>
+  <input type="number" id="price" placeholder="Enter price" step="0.01">
 
   <label for="cashback">Cashback Level:</label>
   <select id="cashback">
@@ -138,55 +135,77 @@
     <option value="50" selected>6 - 50%</option>
   </select>
 
+  <label for="withdraw">Withdraw:</label>
+  <select id="withdraw">
+    <option value="no">No</option>
+    <option value="yes" selected>Yes</option>
+  </select>
+
   <button onclick="calculate()">Calculate</button>
 
   <div class="result" id="result">
     Net Price: -<br>
-    Break-even Price (+5% Fee): -<br>
-    Base Price (No Fee): -<br>
-    Fee Amount: -
+    Discount Amount: -<br>
+    Break-even Price: -
   </div>
 </div>
 
 <script>
-/* Config */
-const FEE_RATE = 0.05;
-
-/* Utils */
 const round2 = n => Math.round(n * 100) / 100;
 
-/* Logic */
-function calculatePricing(price, cashback, referral) {
-  const basePrice = round2(price * (1 - FEE_RATE));
-  const feeAmount = round2(price - basePrice);
+function calculatePricing(price, cashbackPercent, referralPercent, withdraw) {
+  const nominalPercent = cashbackPercent + referralPercent;
 
-  const discountRate = (cashback + referral) / 100;
-  const netPrice = round2(basePrice + feeAmount * (1 - discountRate));
-  const breakEvenPrice = round2(netPrice * (1 + FEE_RATE));
+  // rule: every 20% nominal = 1% real
+  const effectivePercent = nominalPercent / 20;
+  const discountAmount = price * (effectivePercent / 100);
 
-  return { basePrice, feeAmount, netPrice, breakEvenPrice };
+  let netPrice = price - discountAmount;
+
+  // withdraw fee
+  if (withdraw === 'yes') {
+    netPrice += 0.4;
+  }
+
+  const breakEvenPrice = netPrice / 0.95;
+
+  const cashbackAmount =
+    discountAmount * (cashbackPercent / nominalPercent);
+  const referralAmount =
+    discountAmount * (referralPercent / nominalPercent);
+
+  return {
+    netPrice: round2(netPrice),
+    discountAmount: round2(discountAmount),
+    cashbackAmount: round2(cashbackAmount),
+    referralAmount: round2(referralAmount),
+    breakEvenPrice: round2(breakEvenPrice)
+  };
 }
 
-/* Controller */
 function calculate() {
-  const price = parseFloat(document.getElementById('price').value);
+  const price = Number(document.getElementById('price').value);
+  const cashback = Number(document.getElementById('cashback').value);
+  const referral = Number(document.getElementById('referral').value);
+  const withdraw = document.getElementById('withdraw').value;
 
-  if (isNaN(price) || price <= 0) {
+  if (!Number.isFinite(price) || price <= 0) {
     alert('Please enter a valid positive price');
     return;
   }
 
-  const cashback = parseFloat(document.getElementById('cashback').value);
-  const referral = parseFloat(document.getElementById('referral').value);
-
-  const { basePrice, feeAmount, netPrice, breakEvenPrice } =
-    calculatePricing(price, cashback, referral);
+  const {
+    netPrice,
+    discountAmount,
+    cashbackAmount,
+    referralAmount,
+    breakEvenPrice
+  } = calculatePricing(price, cashback, referral, withdraw);
 
   document.getElementById('result').innerHTML = `
     Net Price: ${netPrice.toFixed(2)}<br>
-    Break-even Price (+5% Fee): ${breakEvenPrice.toFixed(2)}<br>
-    Base Price (No Fee): ${basePrice.toFixed(2)}<br>
-    Fee Amount: ${feeAmount.toFixed(2)}
+    Discount Amount: ${cashbackAmount.toFixed(2)} + ${referralAmount.toFixed(2)} = ${discountAmount.toFixed(2)}<br>
+    Break-even Price: ${breakEvenPrice.toFixed(2)}
   `;
 }
 </script>
